@@ -18,7 +18,9 @@ class scene:
     
     def update(self):
         py.display.flip()
-
+    
+    def clear(self):
+        self.screen.fill(self.color)
 
 
 
