@@ -31,13 +31,12 @@ class scene:
 
 class particle:
 
-    dampingcoeff = 0.7
-
     def __init__(self, radius, x, y, color):
         self.radius = radius
         self.color = color
         self.posx = x
         self.posy = y
+        self.velocityMag = 0
 
         self.velocity = [0, 0]
 
@@ -47,75 +46,75 @@ class particle:
     
     #Velocity Methods
     #====================================
-    def initializeRadiusMatrix(radius):
-        pixelx = -radius
-        pixely = -radius
-
-        vectorRadiusDensity = np.zeros((2*radius+1, 2*radius+1))
-       
-        for i in range(0, round((2*radius+1)**2)):
-            distance = (pixelx**2 + pixely**2)**0.5
-            if distance <= radius:
-                vectorRadiusDensity[pixely+radius, pixelx+radius] += (1.0001 - (distance/radius)**3)**6
-
-            pixelx += 1
-            if pixelx > radius:
-                pixelx = -radius
-                pixely += 1
-        
-        return vectorRadiusDensity
-    
     def updateVelocityRandom(self, timeStep):
         self.velocity[0] += 3*timeStep*np.random.standard_normal()
         self.velocity[1] += 3*timeStep*np.random.standard_normal()
     
-    def updateVelocityWallColl(self, scene):
+    def updateVelocityWallColl(self, scene, dampingcoeff):
         if self.posx >= scene.width - self.radius - 1 or self.posx <= self.radius:
-            self.velocity[0] *= -1*particle.dampingcoeff
+            self.velocity[0] *= -1*dampingcoeff
 
         if self.posy >= scene.height - self.radius - 1 or self.posy <= self.radius:
-            self.velocity[1] *= -1*particle.dampingcoeff
+            self.velocity[1] *= -1*dampingcoeff
 
     def updateVelocityWithG(self, g, timeStep):
         self.velocity[1] += g*timeStep
     
-    def updateVelocityVField(self, timeStep, densityVal, vectorRadius ,radiusMatrix, vectorF, scene):
+    def updateVelocityVField(self, timeStep, densityVal, vField):
+        radius = vField.radius
         px = round(self.posx)
         py = round(self.posy)
 
-        xmin, rxmin = (max(0, px-vectorRadius), max(0, vectorRadius-px))
-        xmax, rxmax = (min(scene.width, px+vectorRadius), min(2*vectorRadius, vectorRadius + scene.width-px))
-        ymin, rymin = (max(0, py-vectorRadius), max(0, vectorRadius-py))
-        ymax, rymax = (min(scene.height, py+vectorRadius), min(2*vectorRadius, vectorRadius + scene.height-py))
+        xmin, rxmin = (max(0, px-radius), max(0, radius-px))
+        xmax, rxmax = (min(vField.vectorWidth, px+radius), min(2*radius, radius + vField.vectorWidth-px))
+        ymin, rymin = (max(0, py-radius), max(0, radius-py))
+        ymax, rymax = (min(vField.vectorWidth, py+radius), min(2*radius, radius + vField.vectorHeight-py))
 
-        self.velocity[0] += np.sum(vectorF[ymin:ymax, xmin:xmax, 0]*radiusMatrix[rymin:rymax, rxmin:rxmax])*timeStep*densityVal
+        self.velocity[0] += np.sum(vField.field[ymin:ymax, xmin:xmax, 0]*vField.distanceMultiplier[rymin:rymax, rxmin:rxmax])*timeStep*densityVal
         
-        self.velocity[1] += np.sum(vectorF[ymin:ymax, xmin:xmax, 1]*radiusMatrix[rymin:rymax, rxmin:rxmax])*timeStep*densityVal
+        self.velocity[1] += np.sum(vField.field[ymin:ymax, xmin:xmax, 1]*vField.distanceMultiplier[rymin:rymax, rxmin:rxmax])*timeStep*densityVal
+    
+    def updateVelocityDeceleration(self, dField):
+
+        radius = dField.smoothingRadius
+        px = round(self.posx)
+        py = round(self.posy)
+
+        xmin= max(0, px-radius)
+        xmax= min(dField.fieldWidth, px+radius)
+        ymin= max(0, py-radius)
+        ymax= min(dField.fieldHeight, py+radius)
+
+
+        multiplier = 1 - 0.2*np.sum(dField.field[ymin:ymax, xmin:xmax])/((2*radius+1)**2)
+        self.velocity[0] *= multiplier
+        self.velocity[1] *= multiplier
     
 
-    def updateVelocity(self, g, timeStep, scene, gtrue, rtrue, vtrue, densityVal, vectorRadius, radiusMatrix, vectorF):
+    def updateVelocity(self, g, dampingcoeff, timeStep, scene, gtrue, rtrue, vtrue, dtrue, densityVal, vField, densityF):
         if gtrue:
             self.updateVelocityWithG(g, timeStep)
         if vtrue:
-            self.updateVelocityVField(timeStep, densityVal, vectorRadius, radiusMatrix, vectorF, scene)
+            self.updateVelocityVField(timeStep, densityVal, vField)
         if rtrue:
             self.updateVelocityRandom(timeStep)
+        if dtrue:
+            self.updateVelocityDeceleration(densityF)
         
-        self.velocity[0] *= 0.9
-        self.velocity[1] *= 0.9
+        self.velocityMag = (self.velocity[0]**2 + self.velocity[1]**2)**0.5
 
-        self.updateVelocityWallColl(scene)
+        self.updateVelocityWallColl(scene, dampingcoeff)
     #====================================
 
     #Position Methods
     #====================================
-    def updatePosition(self, scene, vFieldTest):
+    def updatePosition(self, scene):
 
-        self.posx = self.checkWallCollision(self.posx, self.velocity[0], scene.width, vFieldTest)
-        self.posy = self.checkWallCollision(self.posy, self.velocity[1], scene.height, vFieldTest)
+        self.posx = self.checkWallCollision(self.posx, self.velocity[0], scene.width)
+        self.posy = self.checkWallCollision(self.posy, self.velocity[1], scene.height)
 
 
-    def checkWallCollision(self, pos, velocity, wall, vFieldTest):
+    def checkWallCollision(self, pos, velocity, wall):
         if pos + velocity >= self.radius and pos + velocity <= wall - 1 - self.radius:
             pos = pos + velocity
         else:
@@ -123,6 +122,11 @@ class particle:
         
         return pos
     #====================================
+    def updateColor(self):
+        newColor = list(self.color)
+
+        newColor[0] = round(255 * min(1, self.velocityMag/4))
+        self.color = tuple(newColor)
 
 class densityField():
 
@@ -132,17 +136,17 @@ class densityField():
         self.field = np.zeros((height, width))
         self.smoothingRadius = radius
 
-        self.radiusDensity = np.zeros((2*radius+1, 2*radius+1))
-        self.initializeRadiusMatrix()
+        self.addDensity = np.zeros((2*radius+1, 2*radius+1))
+        self.addDensityMatrix()
 
-    def initializeRadiusMatrix(self):
+    def addDensityMatrix(self):
         pixelx = -self.smoothingRadius
         pixely = -self.smoothingRadius
        
         for i in range(0, round((2*self.smoothingRadius+1)**2)):
             distance = (pixelx**2 + pixely**2)**0.5
             if distance <= self.smoothingRadius:
-                self.radiusDensity[pixely+self.smoothingRadius, pixelx+self.smoothingRadius] += (1.0001 - (distance/self.smoothingRadius)**3)**6
+                self.addDensity[pixely+self.smoothingRadius, pixelx+self.smoothingRadius] += (1.0001 - (distance/self.smoothingRadius)**3)**6
 
             pixelx += 1
             if pixelx > self.smoothingRadius:
@@ -158,10 +162,10 @@ class densityField():
         ymin, rymin = (max(0, py-self.smoothingRadius), max(0, self.smoothingRadius-py))
         ymax, rymax = (min(self.fieldHeight, py+self.smoothingRadius), min(2*self.smoothingRadius, self.smoothingRadius + self.fieldHeight-py))
 
-        self.field[ymin:ymax, xmin:xmax] += self.radiusDensity[rymin:rymax, rxmin:rxmax]
+        self.field[ymin:ymax, xmin:xmax] += self.addDensity[rymin:rymax, rxmin:rxmax]
 
     def normalizeField(self):
-        self.field /= self.field.max()
+        self.field /= 5
         
 
     def clearField(self):
@@ -169,22 +173,43 @@ class densityField():
 
     def drawDensityField(self, scene):
         
-        py.surfarray.blit_array(scene.screen, self.field.T *255)
+        py.surfarray.blit_array(scene.screen, (self.field.T/self.field.max()) *255)
         
 
 class vectorField():
 
-    def __init__(self, width, height):
+    def __init__(self, width, height, radius):
         self.vectorWidth = width
         self.vectorHeight = height
-        self.vectorField = np.zeros((height, width, 2))
+        self.field = np.zeros((height, width, 2))
         self.xGrid3D, self.yGrid3D = vectorField.initializeVectorField(height, width)
+        self.radius = radius
+        self.distanceMultiplier = vectorField.initializeDistanceMatrix(radius)
 
     def initializeVectorField(h, w):
         xGrid3D = np.stack([np.full((h, w), -1), np.ones((h, w)), np.zeros((h, w)), np.zeros((h, w))], axis=2)
         yGrid3D = np.stack([np.zeros((h, w)), np.zeros((h, w)), np.ones((h, w)), np.full((h, w), -1)], axis=2)
 
         return xGrid3D, yGrid3D
+    
+    def initializeDistanceMatrix(radius):
+        pixelx = -radius
+        pixely = -radius
+
+        distanceMultiplier = np.zeros((2*radius+1, 2*radius+1))
+        
+        for i in range(0, round((2*radius+1)**2)):
+            distance = (pixelx**2 + pixely**2)**0.5
+            if distance <= radius:
+                distanceMultiplier[pixely+radius, pixelx+radius] += (1.0001 - (distance/radius)**3)**6
+
+            pixelx += 1
+            if pixelx > radius:
+                pixelx = -radius
+                pixely += 1
+        
+        return distanceMultiplier
+    
         
 
     def updateVectorField(self, dField):
@@ -202,19 +227,81 @@ class vectorField():
 
         xVectorsWDensity = xVectors * dField
         yVectorsWDensity = yVectors * dField
+        # (dField-10*(1-(1-dField)**.01))
 
-        self.vectorField = np.stack([xVectorsWDensity, yVectorsWDensity], axis=2)
+        self.field = np.stack([xVectorsWDensity, yVectorsWDensity], axis=2)
     
 
 
     def drawVectorField(self, scene):
 
-        normalField = self.vectorField / self.vectorField.max()
+        normalField = self.field / self.field.max()
 
         py.surfarray.blit_array(scene.screen, normalField[:,:,1].T*255 + normalField[:,:,0].T*255**2)
         
+class changeVectorField():
 
+    def __init__(self, radius, strength):
+        self.radius = radius
+        self.strength = strength
+        self.vectorRadiusDensity = self.initializeRadiusMatrix()
 
+    def initializeRadiusMatrix(self):
+        pixelx = -self.radius
+        pixely = -self.radius
+        vectorX = 1
+        vectorY = 1
+
+        vectorRadiusDensityX = np.zeros((2*self.radius+1, 2*self.radius+1))
+        vectorRadiusDensityY = np.zeros((2*self.radius+1, 2*self.radius+1))
+       
+        for i in range(0, round((2*self.radius+1)**2)):
+            distance = (pixelx**2 + pixely**2)**0.5
+            if  pixelx < 0:
+                vectorX = 1
+            elif pixelx == 0:
+                vectorX = 0
+            else:
+                vectorX = -1
+
+            if pixely < 0:
+                vectorY = 1
+            elif pixely == 0:
+                vectorY = 0
+            else:
+                vectorY = -1
+            
+            if distance <= self.radius:
+                vectorRadiusDensityX[pixely+self.radius, pixelx+self.radius] += vectorX * self.strength  * (1 + 2*abs(pixely)/(2*self.radius)) * (1.0001 - (1.0001 - (distance/self.radius)**1)**21)
+                vectorRadiusDensityY[pixely+self.radius, pixelx+self.radius] += vectorY * self.strength  * (1 + 2*abs(pixely)/(2*self.radius)) *(1.0001 - (1.0001 - (distance/self.radius)**1)**21)
+
+            # (1.0001 - (1.0001 - (distance/self.radius)**1)**21)
+            # (1.0001 - (distance/self.radius)**3)**2
+            pixelx += 1
+            if pixelx > self.radius:
+                pixelx = -self.radius
+                pixely += 1
+            
+            vectorRadiusDensity = np.stack([vectorRadiusDensityX, vectorRadiusDensityY], axis=2)
+
+        return vectorRadiusDensity
+
+    def updateVectorMatrix(self, px, py, vField, mouseRight):
+        
+        xmin, rxmin = (max(0, px-self.radius), max(0, self.radius-px))
+        xmax, rxmax = (min(vField.vectorWidth, px+self.radius), min(2*self.radius, self.radius + vField.vectorWidth-px))
+        ymin, rymin = (max(0, py-self.radius), max(0, self.radius-py))
+        ymax, rymax = (min(vField.vectorHeight, py+self.radius), min(2*self.radius, self.radius + vField.vectorHeight-py))
+
+        reverse = 1
+        if mouseRight:
+            reverse = -1
+        
+        vField.field[ymin:ymax, xmin:xmax, 0] += self.vectorRadiusDensity[rymin:rymax, rxmin:rxmax, 0] * reverse
+        vField.field[ymin:ymax, xmin:xmax, 1] += self.vectorRadiusDensity[rymin:rymax, rxmin:rxmax, 1] * reverse
+
+        return vField
+ 
 
 def makeParticles(amnt, radius, color, scene):
     px = round(scene.width/2 - (round(amnt**0.5)*(radius*2+1))/2 + radius )
@@ -238,7 +325,9 @@ def main():
 
     sceneWidth = 500
     sceneHeight = 500
+
     g = 9.81*7
+    dampingcoeff = 0.7
     densityVal = 5
 
     timeStep = 0.01
@@ -248,31 +337,38 @@ def main():
     particleR = 4
     vectorRadiusMultiplier = 12 
 
-    smoothingR = 25
+    smoothingR = 20
 
-    scene1 = scene(sceneWidth, sceneHeight)
-    particles = makeParticles(particles, particleR, particleColor, scene1)
+    background = scene(sceneWidth, sceneHeight)
+    particles = makeParticles(particles, particleR, particleColor, background)
     
-    densityField1 = densityField(sceneWidth, sceneHeight, smoothingR)
-    vectorField1 = vectorField(sceneWidth, sceneHeight)
-    vectorRadiusDensity = particle.initializeRadiusMatrix(vectorRadiusMultiplier)
+    dField = densityField(sceneWidth, sceneHeight, smoothingR)
+    vField = vectorField(sceneWidth, sceneHeight, vectorRadiusMultiplier)
+    clickMouse = changeVectorField(100, 0.25)
 
 
     run = True
     animate = False
     drawParticles = True
     drawField = False
-    addTimeDelay = True
+    drawPVelocity = True
+    addTimeDelay = False
     useGravity = True
     useRandom = False
     useVField = True
+    useDecel = True
     calcVField = True
-    drawVField = True
+    drawVField = False
+    clickLeft = False
+    clickRight = False
+    addMore = False
+
+    moreDelay = 0
 
     for p in particles:
-        p.draw(scene1)
+        p.draw(background)
     
-    scene1.updateScreen()
+    background.updateScreen()
 
     print("Done")
     while run:
@@ -300,41 +396,72 @@ def main():
                     calcVField = not calcVField
                 if event.key == py.K_b:
                     drawVField = not drawVField
+                if event.key == py.K_d:
+                    useDecel = not useDecel
+                if event.key == py.K_m:
+                    addMore = not addMore
+                if event.key == py.K_a:
+                    drawPVelocity = not drawPVelocity
+                    for p in particles:
+                        p.color = particleColor
 
-                # if event.key == py.K_m:
-                #     method = not method
+            if event.type == py.MOUSEBUTTONDOWN:
+                if py.mouse.get_pressed()[0]:
+                    clickLeft = True
+                    clickRight = False
+                elif py.mouse.get_pressed()[2]:
+                    clickRight = True
+                    clickLeft = False
+            
 
+            elif event.type == py.MOUSEBUTTONUP:
+                clickLeft = False
+                clickRight = False
 
         
 
         if animate:
-            scene1.clear()
-            densityField1.clearField()
+            background.clear()
+            dField.clearField()
+
+            if addMore:
+                if moreDelay == 0:
+                    particles.append(particle(particleR, particleR+5, particleR+5, particleColor))
+                    particles[-1].velocity[0] += 3
+
+                    moreDelay = -1
+                moreDelay += 1
 
             for p in particles:
     
-                densityField1.updateField(p)
+                dField.updateField(p)
 
-            densityField1.normalizeField() 
+            dField.normalizeField() 
             if drawField:
-                densityField1.drawDensityField(scene1)
+                dField.drawDensityField(background)
             
             if calcVField:
-                vectorField1.updateVectorField(densityField1.field)
+                vField.updateVectorField(dField.field)
+
+                if clickLeft or clickRight:
+                    mousepos = py.mouse.get_pos()
+                    vField.vectorField = clickMouse.updateVectorMatrix(mousepos[0], mousepos[1], vField, clickRight)
 
             if drawVField:
-                vectorField1.drawVectorField(scene1)
+                vField.drawVectorField(background)
 
             for p in particles:
-                p.updateVelocity(g, timeStep, scene1, useGravity, useRandom, useVField, densityVal, vectorRadiusMultiplier, vectorRadiusDensity, vectorField1.vectorField)
-                p.updatePosition(scene1, vectorField1.vectorField)
+                p.updateVelocity(g, dampingcoeff, timeStep, background, useGravity, useRandom, useVField, useDecel, densityVal, vField, dField)
+                p.updatePosition(background)
+                if drawPVelocity:
+                    p.updateColor()
                 if drawParticles:
-                    p.draw(scene1)
+                    p.draw(background)
             
             if addTimeDelay:
-                py.draw.rect(scene1.screen, (255, 0, 0), (0, 0, 24, 24))
+                py.draw.rect(background.screen, (255, 0, 0), (0, 0, 24, 24))
 
-            scene1.updateScreen()
+            background.updateScreen()
             if addTimeDelay:
 
                 time.sleep(timeStep)
