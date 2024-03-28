@@ -157,8 +157,11 @@ class particle:
         newColor[0] = round(255 * min(1, self.velocityMag/10))
         self.color = tuple(newColor)
 
+#Class for the density field calculations
 class densityField():
 
+    #Initialize the density field object that has the attributes of screen width and height,
+    #and the radius around each particle
     def __init__(self, width, height, radius):
         self.fieldWidth = width
         self.fieldHeight = height
@@ -168,6 +171,7 @@ class densityField():
         self.addDensity = np.zeros((2*radius+1, 2*radius+1))
         self.addDensityMatrix()
 
+    
     def addDensityMatrix(self):
         pixelx = -self.smoothingRadius
         pixely = -self.smoothingRadius
@@ -182,6 +186,7 @@ class densityField():
                 pixelx = -self.smoothingRadius
                 pixely += 1
 
+    #Method to update the density field after actions have been performed to it
     def updateField(self, particle):
         px = round(particle.posx)
         py = round(particle.posy)
@@ -196,17 +201,19 @@ class densityField():
     def normalizeField(self):
         self.field /= 5
         
-
+    #Method to clear the field by adding all zeros to the field
     def clearField(self):
         self.field = np.zeros((self.fieldHeight, self.fieldWidth))
 
+    #Method to draw the field around each particle
     def drawDensityField(self, background):
-        
         py.surfarray.blit_array(background.screen, (self.field.T/self.field.max()) *255)
         
-
+#Class for the vector field to affect motion of the particles
 class vectorField():
 
+    #Initialize the vector field that has the attributes of the window width and height,
+    #and the radius of the vector field itself.
     def __init__(self, width, height, radius):
         self.vectorWidth = width
         self.vectorHeight = height
@@ -215,6 +222,7 @@ class vectorField():
         self.radius = radius
         self.distanceMultiplier = vectorField.initializeDistanceMatrix(radius)
 
+    #Method to create/start the vector field using a series of 3D arrays 
     def initializeVectorField(h, w):
         xGrid3D = np.stack([np.full((h, w), -1), np.ones((h, w)), np.zeros((h, w)), np.zeros((h, w))], axis=2)
         yGrid3D = np.stack([np.zeros((h, w)), np.zeros((h, w)), np.ones((h, w)), np.full((h, w), -1)], axis=2)
@@ -240,9 +248,12 @@ class vectorField():
         return distanceMultiplier
     
         
-
+    #Method to shift density fields in order to calculate the direction that the particle should move.
     def updateVectorField(self, dField):
+        #By creating 4 new arrays/planes that are shifted on pixel up, left, down, and right, it is less intensive to read all the surrounding density values
+        #of a particle to find out which way the particle should move
 
+        #Particles should move towards the less dense area.
         densityLEFT = np.hstack((dField[:,1:], np.ones((self.vectorHeight,1))))
         densityRIGHT = np.hstack((np.ones((self.vectorHeight,1)), dField[:,:-1]))
         densityDOWN = np.vstack((np.ones((1,self.vectorWidth)), dField[:-1,:]))
@@ -260,13 +271,13 @@ class vectorField():
         self.field = np.stack([xVectorsWDensity, yVectorsWDensity], axis=2)
     
 
-
+    #Method to draw the vector field around each particle, the more transparent it is the less dense that area is.
     def drawVectorField(self, background):
 
         normalField = self.field / self.field.max()
 
         py.surfarray.blit_array(background.screen, normalField[:,:,1].T*255 + normalField[:,:,0].T*255**2)
-        
+
 class changeVectorField():
 
     def __init__(self, radius, strength):
@@ -346,33 +357,37 @@ def makeParticles(amnt, radius, color, background):
     
     return particles
 
-
+#Create the main function in which all actions will be performed
 def main():
-
+    #Create the variables for the size of the screen
     sceneWidth = 500
     sceneHeight = 500
-
+    #Create the variables that are used for gravity and rebound restitution
     g = 9.81*7
     dampingcoeff = 0.7
     densityVal = 5
-
+    #Create the variable for timeStep which will slow down the program
     timeStep = 0.01
-
+    #Create the variables for the number of particles, their color, radius, and multiplier which will allow for the creation of the particle object
     particles = 500 
     particleColor = (0, 163, 108)
     particleR = 4
     vectorRadiusMultiplier = 12 
-
+    
     smoothingR = 20
 
+    #Create the objects for the background and the particles using the variables defined above.
     background = window(sceneWidth, sceneHeight)
     particles = makeParticles(particles, particleR, particleColor, background)
-    
+
+    #Create the objects for the density field, vector field, and changeVectorField which will 
+    #create a vector field around the mouse upon click
     dField = densityField(sceneWidth, sceneHeight, smoothingR)
     vField = vectorField(sceneWidth, sceneHeight, vectorRadiusMultiplier)
     clickMouse = changeVectorField(100, 0.25)
 
-
+    #Set conditions for the display of the particles and fields upon starting the program, these will
+    #be switched upon respective key presses
     run = True
     animate = False
     drawParticles = True
@@ -390,20 +405,24 @@ def main():
 
     moreDelay = 0
 
+    #Draw the number of particles specified in the particle class object created above, with their attributes also created above
     for p in particles:
         p.draw(background)
-    
+
+    #Update the screen to show all the particles drawn
     background.updateScreen()
 
     print("Done")
+   
+    #While loop that will continuously run the program as long as the user doesn't click quit
     while run:
 
-
-
+        #Check every event possible in pygame, including keyboard pressed, clicks, etc.
         for event in py.event.get():
+            #If the user clicks quit, end the while loop and the program.
             if event.type == py.QUIT: 
                 run = False
-        
+            #If the event is a key press, check which one and inverse the respective condition from above which will cause a program change
             if event.type == py.KEYDOWN:
                 if event.key == py.K_SPACE:
                     animate = not animate
@@ -427,7 +446,7 @@ def main():
                     drawPVelocity = not drawPVelocity
                     for p in particles:
                         p.color = particleColor
-
+            #If the event is a mouse click, check which mouse button and set the correct variable to true
             if event.type == py.MOUSEBUTTONDOWN:
                 if py.mouse.get_pressed()[0]:
                     clickLeft = True
@@ -436,17 +455,17 @@ def main():
                     clickRight = True
                     clickLeft = False
             
-
+            #When the click is released, set both variables to false to stop the action
             elif event.type == py.MOUSEBUTTONUP:
                 clickLeft = False
                 clickRight = False
 
         
-
+        #The following if statements check the variable booleans created above to see what should be drawn, taken away, created, etc.
+        #According to which is true, the corresponding method from the corresponding class is called with the parameters it requires, causing it's respective action.
         if animate:
             background.clear()
             dField.clearField()
-
             if addMore:
                 if moreDelay == 0:
                     particles.append(particle(particleR, particleR+5, particleR+5, particleColor))
@@ -454,12 +473,10 @@ def main():
 
                     moreDelay = -1
                 moreDelay += 1
-
             #=====
             for p in particles:
     
                 dField.updateField(p)
-
             dField.normalizeField() 
             if drawField:
                 dField.drawDensityField(background)
@@ -468,7 +485,6 @@ def main():
             if clickLeft or clickRight:
                 mousepos = py.mouse.get_pos()
                 vField.vectorField = clickMouse.updateVectorMatrix(mousepos[0], mousepos[1], vField, clickRight)
-
             if drawVField:
                 vField.drawVectorField(background)
             #=====
@@ -482,10 +498,8 @@ def main():
             #=====
             if addTimeDelay:
                 py.draw.rect(background.screen, (255, 0, 0), (0, 0, 24, 24))
-
             background.updateScreen()
             if addTimeDelay:
-
                 time.sleep(timeStep)
 
 main()
