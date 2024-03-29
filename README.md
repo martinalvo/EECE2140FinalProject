@@ -92,8 +92,10 @@ For all contributions to this project made by a non-collaborator, use the follow
 
 ## Acknowledgments
 
-Use this space to list resources you find helpful and would like to give credit to. I've included a few of my favorites to kick things off!
-
+Authors:
+* Pablo Sabater - Presentation, organization, comments, and help with coding
+* Martin Alvo - Lead coder
+  
 * [Sebastian Lague Video (Inspiration)](https://www.youtube.com/watch?v=rSKMYc1CQHE&t=245s&ab_channel=SebastianLague)
 * [SPH Wikipedia](https://en.wikipedia.org/wiki/Smoothed-particle_hydrodynamics)
 * [Numpy N Dimensional Arrays](https://numpy.org/doc/stable/reference/arrays.ndarray.html)
