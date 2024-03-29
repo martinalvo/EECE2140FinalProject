@@ -67,13 +67,25 @@ Demo:
 
 ## Contributing
 
-For all contributions to this project
+For all contributions to this project made by a non-collaborator, use the following steps. Collaborations are always welcome.
 
 1. Fork the Project
-2. Create the Branch (`git checkout -b BRANCHNAME`)
-3. Commit your Changes (`git commit -m 'FEATURE ADDED'`)
-4. Add the origin as this repository (`git remote add origin https://github.com/pablosabaterlp/EECE2140FinalProject`)
-5. Push to the Branch (`git push origin BRANCHNAME`)
+2. Create the Branch
+   ```sh
+    git checkout -b BRANCHNAME
+   ```
+3. Commit your Changes
+   ```sh
+    git commit -m 'FEATURE ADDED'
+   ```
+4. Add the origin as this repository
+   ```sh
+    git remote add origin https://github.com/pablosabaterlp/EECE2140FinalProject.git
+   ```
+5. Push to the Branch
+   ```sh
+    git push -u origin BRANCHNAME
+   ```
 6. Open a Pull Request
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
