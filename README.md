@@ -95,7 +95,8 @@ For all contributions to this project made by a non-collaborator, use the follow
 Authors:
 * Pablo Sabater - Presentation, organization, comments, and help with coding
 * Martin Alvo - Lead coder
-  
+
+References:
 * [Sebastian Lague Video (Inspiration)](https://www.youtube.com/watch?v=rSKMYc1CQHE&t=245s&ab_channel=SebastianLague)
 * [SPH Wikipedia](https://en.wikipedia.org/wiki/Smoothed-particle_hydrodynamics)
 * [Numpy N Dimensional Arrays](https://numpy.org/doc/stable/reference/arrays.ndarray.html)
