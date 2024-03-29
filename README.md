@@ -62,6 +62,7 @@ The following actions can be performed in the program:
 
 Demo:
 
+![](https://github.com/pablosabaterlp/EECE2140FinalProject/blob/main/otherFiles/simulationgif.gif)
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
