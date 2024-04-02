@@ -69,12 +69,12 @@ Demo:
 
 For all contributions to this project made by a non-collaborator, use the following steps. Collaborations are always welcome.
 
-1. Fork the Project
-2. Create the Branch
+1. Fork the project
+2. Create the branch
    ```sh
     git checkout -b BRANCHNAME
    ```
-3. Commit your Changes
+3. Add and commit your changes
    ```sh
     git commit -m 'FEATURE ADDED'
    ```
@@ -82,18 +82,18 @@ For all contributions to this project made by a non-collaborator, use the follow
    ```sh
     git remote add origin https://github.com/pablosabaterlp/EECE2140FinalProject.git
    ```
-5. Push to the Branch
+5. Push to the branch
    ```sh
     git push -u origin BRANCHNAME
    ```
-6. Open a Pull Request
+6. Open a pull request
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Acknowledgments
 
 Authors:
-* Pablo Sabater - Presentation, organization, comments, and help with coding
+* Pablo Sabater - Presentation, organization, and help with coding
 * Martin Alvo - Lead coder
 
 References:
