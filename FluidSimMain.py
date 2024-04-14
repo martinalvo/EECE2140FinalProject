@@ -3,6 +3,7 @@ import math
 import numpy as np
 import time
 
+#For the github repository follow this link: https://github.com/pablosabaterlp/EECE2140FinalProject.git
 
 #window class, for drawing drawing the background of the simulation
 class window:
