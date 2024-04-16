@@ -3,6 +3,7 @@ import math
 import numpy as np
 import time
 
+#For the github repository follow this link: https://github.com/pablosabaterlp/EECE2140FinalProject.git
 
 #window class, for drawing drawing the background of the simulation
 class window:
@@ -172,7 +173,7 @@ class densityField():
         self.addDensity = np.zeros((2*radius+1, 2*radius+1))
         self.addDensityMatrix()
 
-    #Method for creating the matrix that will add onto the density field matrix for each particle position
+  #Method for creating the matrix that will add onto the density field matrix for each particle position
     def addDensityMatrix(self):
         pixelx = -self.smoothingRadius
         pixely = -self.smoothingRadius
@@ -252,7 +253,6 @@ class vectorField():
         
         return distanceMultiplier
     
-        
     #Method to shift density fields in order to calculate the dirrection each vector of the grid should go in
     def updateVectorField(self, dField):
         #By creating 4 new arrays/planes that are shifted on pixel up, left, down, and right, it is less intensive to read all the surrounding density values
