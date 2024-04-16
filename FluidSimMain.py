@@ -131,12 +131,6 @@ class particle:
 
     #Position Methods
     #====================================
-        
-    #Method to update the position with the particles velocity. It simoltenusly checks for wall collisions
-    def updatePosition(self, background):
-
-        self.posx = self.checkWallCollision(self.posx, self.velocity[0], background.width)
-        self.posy = self.checkWallCollision(self.posy, self.velocity[1], background.height)
     
     #Method to check if a particle has collided into a wall
     def checkWallCollision(self, pos, velocity, wall):
@@ -149,6 +143,13 @@ class particle:
             pos = self.radius if pos < wall/10 else wall - self.radius - 1
         
         return pos
+    
+    #Method to update the position with the particles velocity. It simoltenusly checks for wall collisions
+    def updatePosition(self, background):
+
+        self.posx = self.checkWallCollision(self.posx, self.velocity[0], background.width)
+        self.posy = self.checkWallCollision(self.posy, self.velocity[1], background.height)
+    
     #====================================
     #Method to update the color of the particle based on its velocity
     def updateColor(self):
@@ -157,8 +158,11 @@ class particle:
         newColor[0] = round(255 * min(1, self.velocityMag/10))
         self.color = tuple(newColor)
 
+#Class for the density field calculations
 class densityField():
 
+    #Initialize the density field object that has the attributes of screen width and height,
+    #and the radius around each particle
     def __init__(self, width, height, radius):
         self.fieldWidth = width
         self.fieldHeight = height
@@ -168,6 +172,7 @@ class densityField():
         self.addDensity = np.zeros((2*radius+1, 2*radius+1))
         self.addDensityMatrix()
 
+    #Method for creating the matrix that will add onto the density field matrix for each particle position
     def addDensityMatrix(self):
         pixelx = -self.smoothingRadius
         pixely = -self.smoothingRadius
@@ -182,6 +187,7 @@ class densityField():
                 pixelx = -self.smoothingRadius
                 pixely += 1
 
+    #Method to update the density field after actions have been performed to it
     def updateField(self, particle):
         px = round(particle.posx)
         py = round(particle.posy)
@@ -193,40 +199,47 @@ class densityField():
 
         self.field[ymin:ymax, xmin:xmax] += self.addDensity[rymin:rymax, rxmin:rxmax]
 
+
     def normalizeField(self):
         self.field /= 5
         
-
+    #Method to clear the field by adding all zeros to the field
     def clearField(self):
         self.field = np.zeros((self.fieldHeight, self.fieldWidth))
 
+    #Method to draw the field around each particle
     def drawDensityField(self, background):
-        
         py.surfarray.blit_array(background.screen, (self.field.T/self.field.max()) *255)
         
-
+#Class for the velocity vector field to affect motion of the particles
 class vectorField():
 
+    #Initialize the vector field that has the attributes of the window width and height,
+    #and the radius of the vector field itself.
     def __init__(self, width, height, radius):
         self.vectorWidth = width
         self.vectorHeight = height
         self.field = np.zeros((height, width, 2))
-        self.xGrid3D, self.yGrid3D = vectorField.initializeVectorField(height, width)
+        self.xGrid3D, self.yGrid3D = vectorField.initializeGrids(height, width)
         self.radius = radius
         self.distanceMultiplier = vectorField.initializeDistanceMatrix(radius)
 
-    def initializeVectorField(h, w):
+    #Method to create/start the vector field using a series of 3D arrays
+    def initializeGrids(h, w):
         xGrid3D = np.stack([np.full((h, w), -1), np.ones((h, w)), np.zeros((h, w)), np.zeros((h, w))], axis=2)
         yGrid3D = np.stack([np.zeros((h, w)), np.zeros((h, w)), np.ones((h, w)), np.full((h, w), -1)], axis=2)
 
         return xGrid3D, yGrid3D
     
+    #Method to create a matrix that holds values where the center of the matrix is 1, and the values
+    #decrease as they get further away. The matrix holds 0 for any value outside the radius inputed
     def initializeDistanceMatrix(radius):
         pixelx = -radius
         pixely = -radius
 
         distanceMultiplier = np.zeros((2*radius+1, 2*radius+1))
         
+        #For every element in the matrix, set its value to a function of its distance to the center
         for i in range(0, round((2*radius+1)**2)):
             distance = (pixelx**2 + pixely**2)**0.5
             if distance <= radius:
@@ -240,40 +253,57 @@ class vectorField():
         return distanceMultiplier
     
         
-
+    #Method to shift density fields in order to calculate the dirrection each vector of the grid should go in
     def updateVectorField(self, dField):
+        #By creating 4 new arrays/planes that are shifted on pixel up, left, down, and right, it is less intensive to read all the surrounding density values
+        #of a point on the map to find out which way the velocity vector should go
 
+        #Creating shiften arrays in all 4 cardinal directions of the density field to then sort them. The edges of the field
+        #are replaced with 1s (highest value) to encourage vector to go away from the edges
         densityLEFT = np.hstack((dField[:,1:], np.ones((self.vectorHeight,1))))
         densityRIGHT = np.hstack((np.ones((self.vectorHeight,1)), dField[:,:-1]))
         densityDOWN = np.vstack((np.ones((1,self.vectorWidth)), dField[:-1,:]))
         densityUP = np.vstack((dField[1:,:], np.ones((1,self.vectorWidth))))
 
+        #Creating a 3D matrix out of the shifted matrices
         densityStack = np.stack([densityLEFT, densityRIGHT, densityDOWN, densityUP], axis=2)
+        #Creating a sorting index matrix to then take_along_axis only the values of direction that point away from
+        #the highest density value in the densityStack
         densityPicks = np.argsort(densityStack, axis=2)
 
+        #Taking from the xGrid3D using the sorting matrix created by the preveius two lines. Taking the 4th index
+        #along the 3rd axis because it corresponds to what the heighest density values where in the 3D density stack
         xVectors = np.take_along_axis(self.xGrid3D, densityPicks, axis=2)[:,:,3]
+        #Same for yGrid
         yVectors = np.take_along_axis(self.yGrid3D, densityPicks, axis=2)[:,:,3]
 
+        #Multiplying the dirrection x and y matrixes by the density field to scale their strength
         xVectorsWDensity = xVectors * dField
         yVectorsWDensity = yVectors * dField
 
+        #Combining the two x and y velocities into one 3D Matrix representing the velocity vector field
         self.field = np.stack([xVectorsWDensity, yVectorsWDensity], axis=2)
     
 
-
+    #Method to draw the vector field around each particle, the more transparent it is the less dense that area is.
     def drawVectorField(self, background):
-
+        
+        #normalizing the field first
         normalField = self.field / self.field.max()
 
+        #updating the python pixelarray's color
         py.surfarray.blit_array(background.screen, normalField[:,:,1].T*255 + normalField[:,:,0].T*255**2)
-        
+
 class changeVectorField():
 
+    #Constructor for initializing the velocity vector field
     def __init__(self, radius, strength):
         self.radius = radius
         self.strength = strength
         self.vectorRadiusDensity = self.initializeRadiusMatrix()
 
+    #Method to initialize the vectorRadiusDensity in order to be able to affect the vector field matrix
+    #With the mouse clicks at a certain position
     def initializeRadiusMatrix(self):
         pixelx = -self.radius
         pixely = -self.radius
@@ -312,6 +342,7 @@ class changeVectorField():
 
         return vectorRadiusDensity
 
+    #Method for updating the velocity vector matrix at a specific point of the mouse
     def updateVectorMatrix(self, px, py, vField, mouseRight):
         
         xmin, rxmin = (max(0, px-self.radius), max(0, self.radius-px))
@@ -328,7 +359,7 @@ class changeVectorField():
 
         return vField
  
-
+#Function to make all the particles at the beggining of the program.
 def makeParticles(amnt, radius, color, background):
     px = round(background.width/2 - (round(amnt**0.5)*(radius*2+1))/2 + radius )
     py = round(background.height/2 - (round(amnt**0.5)*(radius*2+1))/2 + radius )
@@ -346,33 +377,37 @@ def makeParticles(amnt, radius, color, background):
     
     return particles
 
-
+#Create the main function in which all actions will be performed
 def main():
-
+    #Create the variables for the size of the screen
     sceneWidth = 500
     sceneHeight = 500
-
+    #Create the variables that are used for gravity and rebound restitution
     g = 9.81*7
     dampingcoeff = 0.7
     densityVal = 5
-
+    #Create the variable for timeStep which will slow down the program
     timeStep = 0.01
-
+    #Create the variables for the number of particles, their color, radius, and multiplier which will allow for the creation of the particle object
     particles = 500 
     particleColor = (0, 163, 108)
     particleR = 4
     vectorRadiusMultiplier = 12 
-
+    
     smoothingR = 20
 
+    #Create the objects for the background and the particles using the variables defined above.
     background = window(sceneWidth, sceneHeight)
     particles = makeParticles(particles, particleR, particleColor, background)
-    
+
+    #Create the objects for the density field, vector field, and changeVectorField which will 
+    #create a vector field around the mouse upon click
     dField = densityField(sceneWidth, sceneHeight, smoothingR)
     vField = vectorField(sceneWidth, sceneHeight, vectorRadiusMultiplier)
     clickMouse = changeVectorField(100, 0.25)
 
-
+    #Set conditions for the display of the particles and fields upon starting the program, these will
+    #be switched upon respective key presses
     run = True
     animate = False
     drawParticles = True
@@ -390,20 +425,24 @@ def main():
 
     moreDelay = 0
 
+    #Draw the number of particles specified in the particle class object created above, with their attributes also created above
     for p in particles:
         p.draw(background)
-    
+
+    #Update the screen to show all the particles drawn
     background.updateScreen()
 
     print("Done")
+   
+    #While loop that will continuously run the program as long as the user doesn't click quit
     while run:
 
-
-
+        #Check every event possible in pygame, including keyboard pressed, clicks, etc.
         for event in py.event.get():
+            #If the user clicks quit, end the while loop and the program.
             if event.type == py.QUIT: 
                 run = False
-        
+            #If the event is a key press, check which one and inverse the respective condition from above which will cause a program change
             if event.type == py.KEYDOWN:
                 if event.key == py.K_SPACE:
                     animate = not animate
@@ -427,7 +466,7 @@ def main():
                     drawPVelocity = not drawPVelocity
                     for p in particles:
                         p.color = particleColor
-
+            #If the event is a mouse click, check which mouse button and set the correct variable to true
             if event.type == py.MOUSEBUTTONDOWN:
                 if py.mouse.get_pressed()[0]:
                     clickLeft = True
@@ -436,17 +475,17 @@ def main():
                     clickRight = True
                     clickLeft = False
             
-
+            #When the click is released, set both variables to false to stop the action
             elif event.type == py.MOUSEBUTTONUP:
                 clickLeft = False
                 clickRight = False
 
         
-
+        #The following if statements check the variable booleans created above to see what should be drawn, taken away, created, etc.
+        #According to which is true, the corresponding method from the corresponding class is called with the parameters it requires, causing it's respective action.
         if animate:
             background.clear()
             dField.clearField()
-
             if addMore:
                 if moreDelay == 0:
                     particles.append(particle(particleR, particleR+5, particleR+5, particleColor))
@@ -454,12 +493,10 @@ def main():
 
                     moreDelay = -1
                 moreDelay += 1
-
             #=====
             for p in particles:
     
                 dField.updateField(p)
-
             dField.normalizeField() 
             if drawField:
                 dField.drawDensityField(background)
@@ -468,7 +505,6 @@ def main():
             if clickLeft or clickRight:
                 mousepos = py.mouse.get_pos()
                 vField.vectorField = clickMouse.updateVectorMatrix(mousepos[0], mousepos[1], vField, clickRight)
-
             if drawVField:
                 vField.drawVectorField(background)
             #=====
@@ -482,14 +518,8 @@ def main():
             #=====
             if addTimeDelay:
                 py.draw.rect(background.screen, (255, 0, 0), (0, 0, 24, 24))
-
             background.updateScreen()
             if addTimeDelay:
-
                 time.sleep(timeStep)
 
 main()
-
-
-
-
