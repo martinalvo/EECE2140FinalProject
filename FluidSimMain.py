@@ -132,12 +132,6 @@ class particle:
 
     #Position Methods
     #====================================
-        
-    #Method to update the position with the particles velocity. It simoltenusly checks for wall collisions
-    def updatePosition(self, background):
-
-        self.posx = self.checkWallCollision(self.posx, self.velocity[0], background.width)
-        self.posy = self.checkWallCollision(self.posy, self.velocity[1], background.height)
     
     #Method to check if a particle has collided into a wall
     def checkWallCollision(self, pos, velocity, wall):
@@ -150,6 +144,13 @@ class particle:
             pos = self.radius if pos < wall/10 else wall - self.radius - 1
         
         return pos
+    
+    #Method to update the position with the particles velocity. It simoltenusly checks for wall collisions
+    def updatePosition(self, background):
+
+        self.posx = self.checkWallCollision(self.posx, self.velocity[0], background.width)
+        self.posy = self.checkWallCollision(self.posy, self.velocity[1], background.height)
+    
     #====================================
     #Method to update the color of the particle based on its velocity
     def updateColor(self):
@@ -172,7 +173,7 @@ class densityField():
         self.addDensity = np.zeros((2*radius+1, 2*radius+1))
         self.addDensityMatrix()
 
-    
+  #Method for creating the matrix that will add onto the density field matrix for each particle position
     def addDensityMatrix(self):
         pixelx = -self.smoothingRadius
         pixely = -self.smoothingRadius
@@ -199,6 +200,7 @@ class densityField():
 
         self.field[ymin:ymax, xmin:xmax] += self.addDensity[rymin:rymax, rxmin:rxmax]
 
+
     def normalizeField(self):
         self.field /= 5
         
@@ -210,7 +212,7 @@ class densityField():
     def drawDensityField(self, background):
         py.surfarray.blit_array(background.screen, (self.field.T/self.field.max()) *255)
         
-#Class for the vector field to affect motion of the particles
+#Class for the velocity vector field to affect motion of the particles
 class vectorField():
 
     #Initialize the vector field that has the attributes of the window width and height,
@@ -219,23 +221,26 @@ class vectorField():
         self.vectorWidth = width
         self.vectorHeight = height
         self.field = np.zeros((height, width, 2))
-        self.xGrid3D, self.yGrid3D = vectorField.initializeVectorField(height, width)
+        self.xGrid3D, self.yGrid3D = vectorField.initializeGrids(height, width)
         self.radius = radius
         self.distanceMultiplier = vectorField.initializeDistanceMatrix(radius)
 
-    #Method to create/start the vector field using a series of 3D arrays 
-    def initializeVectorField(h, w):
+    #Method to create/start the vector field using a series of 3D arrays
+    def initializeGrids(h, w):
         xGrid3D = np.stack([np.full((h, w), -1), np.ones((h, w)), np.zeros((h, w)), np.zeros((h, w))], axis=2)
         yGrid3D = np.stack([np.zeros((h, w)), np.zeros((h, w)), np.ones((h, w)), np.full((h, w), -1)], axis=2)
 
         return xGrid3D, yGrid3D
     
+    #Method to create a matrix that holds values where the center of the matrix is 1, and the values
+    #decrease as they get further away. The matrix holds 0 for any value outside the radius inputed
     def initializeDistanceMatrix(radius):
         pixelx = -radius
         pixely = -radius
 
         distanceMultiplier = np.zeros((2*radius+1, 2*radius+1))
         
+        #For every element in the matrix, set its value to a function of its distance to the center
         for i in range(0, round((2*radius+1)**2)):
             distance = (pixelx**2 + pixely**2)**0.5
             if distance <= radius:
@@ -248,44 +253,57 @@ class vectorField():
         
         return distanceMultiplier
     
-        
-    #Method to shift density fields in order to calculate the direction that the particle should move.
+    #Method to shift density fields in order to calculate the dirrection each vector of the grid should go in
     def updateVectorField(self, dField):
         #By creating 4 new arrays/planes that are shifted on pixel up, left, down, and right, it is less intensive to read all the surrounding density values
-        #of a particle to find out which way the particle should move
+        #of a point on the map to find out which way the velocity vector should go
 
-        #Particles should move towards the less dense area.
+        #Creating shiften arrays in all 4 cardinal directions of the density field to then sort them. The edges of the field
+        #are replaced with 1s (highest value) to encourage vector to go away from the edges
         densityLEFT = np.hstack((dField[:,1:], np.ones((self.vectorHeight,1))))
         densityRIGHT = np.hstack((np.ones((self.vectorHeight,1)), dField[:,:-1]))
         densityDOWN = np.vstack((np.ones((1,self.vectorWidth)), dField[:-1,:]))
         densityUP = np.vstack((dField[1:,:], np.ones((1,self.vectorWidth))))
 
+        #Creating a 3D matrix out of the shifted matrices
         densityStack = np.stack([densityLEFT, densityRIGHT, densityDOWN, densityUP], axis=2)
+        #Creating a sorting index matrix to then take_along_axis only the values of direction that point away from
+        #the highest density value in the densityStack
         densityPicks = np.argsort(densityStack, axis=2)
 
+        #Taking from the xGrid3D using the sorting matrix created by the preveius two lines. Taking the 4th index
+        #along the 3rd axis because it corresponds to what the heighest density values where in the 3D density stack
         xVectors = np.take_along_axis(self.xGrid3D, densityPicks, axis=2)[:,:,3]
+        #Same for yGrid
         yVectors = np.take_along_axis(self.yGrid3D, densityPicks, axis=2)[:,:,3]
 
+        #Multiplying the dirrection x and y matrixes by the density field to scale their strength
         xVectorsWDensity = xVectors * dField
         yVectorsWDensity = yVectors * dField
 
+        #Combining the two x and y velocities into one 3D Matrix representing the velocity vector field
         self.field = np.stack([xVectorsWDensity, yVectorsWDensity], axis=2)
     
 
     #Method to draw the vector field around each particle, the more transparent it is the less dense that area is.
     def drawVectorField(self, background):
-
+        
+        #normalizing the field first
         normalField = self.field / self.field.max()
 
+        #updating the python pixelarray's color
         py.surfarray.blit_array(background.screen, normalField[:,:,1].T*255 + normalField[:,:,0].T*255**2)
 
 class changeVectorField():
 
+    #Constructor for initializing the velocity vector field
     def __init__(self, radius, strength):
         self.radius = radius
         self.strength = strength
         self.vectorRadiusDensity = self.initializeRadiusMatrix()
 
+    #Method to initialize the vectorRadiusDensity in order to be able to affect the vector field matrix
+    #With the mouse clicks at a certain position
     def initializeRadiusMatrix(self):
         pixelx = -self.radius
         pixely = -self.radius
@@ -324,6 +342,7 @@ class changeVectorField():
 
         return vectorRadiusDensity
 
+    #Method for updating the velocity vector matrix at a specific point of the mouse
     def updateVectorMatrix(self, px, py, vField, mouseRight):
         
         xmin, rxmin = (max(0, px-self.radius), max(0, self.radius-px))
@@ -340,7 +359,7 @@ class changeVectorField():
 
         return vField
  
-
+#Function to make all the particles at the beggining of the program.
 def makeParticles(amnt, radius, color, background):
     px = round(background.width/2 - (round(amnt**0.5)*(radius*2+1))/2 + radius )
     py = round(background.height/2 - (round(amnt**0.5)*(radius*2+1))/2 + radius )
@@ -504,7 +523,3 @@ def main():
                 time.sleep(timeStep)
 
 main()
-
-
-
-
